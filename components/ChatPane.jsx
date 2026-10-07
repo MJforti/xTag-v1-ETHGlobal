@@ -1,0 +1,125 @@
+"use client"
+
+import { useState } from "react"
+import { Square, Eye } from "lucide-react"
+import Message from "./Message"
+import Composer from "./Composer"
+import NftMetadataModal from "./NftMetadataModal"
+import { Button } from "./ui/button"
+
+function ThinkingMessage({ onPause }) {
+  return (
+    <Message role="assistant">
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1">
+          <div className="h-2 w-2 animate-bounce rounded-full bg-zinc-400 [animation-delay:-0.3s]"></div>
+          <div className="h-2 w-2 animate-bounce rounded-full bg-zinc-400 [animation-delay:-0.15s]"></div>
+          <div className="h-2 w-2 animate-bounce rounded-full bg-zinc-400"></div>
+        </div>
+        <span className="text-sm text-zinc-500">AI is thinking...</span>
+        <button
+          onClick={onPause}
+          className="ml-auto inline-flex items-center gap-1 rounded-full border border-zinc-300 px-2 py-1 text-xs text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
+        >
+          <Square className="h-3 w-3" /> Pause
+        </button>
+      </div>
+    </Message>
+  )
+}
+
+export default function ChatPane({ messages = [], onSend, isThinking, onPauseThinking }) {
+  const [busy, setBusy] = useState(false)
+  const [nftModalOpen, setNftModalOpen] = useState(false);
+  const [nftModalData, setNftModalData] = useState([]);
+
+  const handleViewNftDetails = (data) => {
+    setNftModalData(data);
+    setNftModalOpen(true);
+  };
+
+  return (
+    <div className="flex h-full min-h-0 flex-1 flex-col">
+      <NftMetadataModal 
+        isOpen={nftModalOpen} 
+        onClose={() => setNftModalOpen(false)} 
+        data={nftModalData} 
+      />
+      <div className="flex-1 space-y-5 overflow-y-auto px-4 py-6 sm:px-8">
+        {messages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full">
+            <div className="text-center">
+              <div className="h-16 w-16 mb-4 mx-auto">
+                <img src="/XtagLogoBK.png" alt="xTag Logo" className="h-16 w-16 dark:hidden" />
+                <img src="/XtagLogoWh.png" alt="xTag Logo" className="h-16 w-16 hidden dark:block" />
+              </div>
+              <h2 className="text-2xl font-semibold tracking-tight">How can I help you today?</h2>
+              <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+                Try asking for "what's in my wallet?" or "get info for an NFT" to see the smart agent in action.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
+            {messages.map((m) => {
+              const actionRegex = /\[DYAD_ACTION:(.+)\]/;
+              const nftRegex = /\[DYAD_NFT_DATA:(.+)\]/;
+              
+              const actionMatch = m.content.match(actionRegex);
+              const nftMatch = m.content.match(nftRegex);
+              
+              let cleanContent = m.content;
+              let actionCommand = null;
+              let nftData = null;
+
+              if (actionMatch && m.role === 'assistant') {
+                cleanContent = m.content.replace(actionRegex, "").trim();
+                actionCommand = actionMatch[1];
+              }
+              
+              if (nftMatch && m.role === 'assistant') {
+                cleanContent = m.content.replace(nftRegex, "").trim();
+                try {
+                  nftData = JSON.parse(nftMatch[1]);
+                } catch (e) {
+                  console.error("Failed to parse NFT JSON", e);
+                }
+              }
+
+              return (
+                <div key={m.id} className="space-y-2">
+                  <Message 
+                    role={m.role}
+                    actionCommand={actionCommand}
+                    onActionConfirm={onSend}
+                  >
+                    {cleanContent}
+                  </Message>
+                  {nftData && (
+                    <div className="flex justify-start pl-10">
+                       <Button variant="outline" size="sm" onClick={() => handleViewNftDetails(nftData)}>
+                         <Eye className="mr-2 h-4 w-4" />
+                         View NFT Details
+                       </Button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+            {isThinking && <ThinkingMessage onPause={onPauseThinking} />}
+          </>
+        )}
+      </div>
+
+      <Composer
+        onSend={async (text) => {
+          if (!text.trim()) return
+          setBusy(true)
+          await onSend?.(text)
+          setBusy(false)
+        }}
+        busy={busy}
+      />
+    </div>
+  )
+}
